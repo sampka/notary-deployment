@@ -52,6 +52,12 @@ resource "aws_instance" "nitro_tee" {
   enclave_options {
     enabled = true
   }
+  
+  root_block_device {
+    volume_size = 32  # Set root volume to 32GB
+    volume_type = "gp2"
+    encrypted   = true
+  }
 
   tags = {
     Name = var.instance_name

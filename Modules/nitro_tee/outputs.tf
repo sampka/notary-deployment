@@ -1,3 +1,7 @@
-output "instance_public_ip" {
-  value = aws_instance.nitro_tee.public_ip
+output "nlb_dns_name" {
+  value = aws_lb.nlb.dns_name
+}
+
+output "nlb_zone_id" {
+  value = aws_lb.nlb.zone_id
 }

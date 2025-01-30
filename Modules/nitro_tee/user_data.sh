@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euxo pipefail  # Exit on error, unset variables, and pipefail
+set -euxo pipefail  
 
 # Run as root but switch to ec2-user for setup
 export HOME=/home/ec2-user
@@ -28,14 +28,13 @@ cpu_count: 2
 EOF
 sudo systemctl restart nitro-enclaves-allocator.service
 
-# Install gvproxy and start as service
+# Install gvproxy and start as service (I version locked this cause i was having issues with the automation using the Makefile)
 sudo -i -u ec2-user /bin/bash <<'EOS'
   wget https://github.com/containers/gvisor-tap-vsock/releases/download/v0.8.2/gvproxy-linux-amd64
   chmod +x gvproxy-linux-amd64
   sudo mv gvproxy-linux-amd64 /usr/local/bin/gvproxy
 EOS
 
-# Start gvproxy after enclave is running
 echo "Starting gvproxy"
 cd /home/ec2-user/freysa-esper-private/tee-tlsn
 sudo ./gvproxy.sh

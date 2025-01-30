@@ -20,6 +20,11 @@ variable "instance_name" {
   default     = "my-nitro-tee"
 }
 
+variable "domain_name" {
+  description = "Domain name for certificate generation"
+  type        = string
+}
+
 variable "github_token" {
   description = "GitHub personal access token for private repo access"
   type        = string

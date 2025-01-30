@@ -1,9 +1,20 @@
+data "aws_vpc" "default" {
+  default = true
+}
+
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+}
+
 data "aws_ssm_parameter" "ami" {
   name = "/aws/service/ami-amazon-linux-latest/amzn2-ami-kernel-5.10-hvm-x86_64-gp2"
 }
 
 resource "aws_security_group" "nitro_sg" {
-  name        = "nitro-enclave-sg"
+  name        = "nitro-enclave-sg-${var.instance_name}"
   description = "Security group for Nitro Enclave EC2 instance"
 
   ingress {
@@ -14,15 +25,8 @@ resource "aws_security_group" "nitro_sg" {
   }
 
   ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 443
-    to_port     = 443
+    from_port   = 7047
+    to_port     = 7047
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -35,7 +39,7 @@ resource "aws_security_group" "nitro_sg" {
   }
 
   tags = {
-    Name = "nitro-enclave-sg"
+    Name = "nitro-enclave-sg-${var.instance_name}"
   }
 }
 
@@ -49,24 +53,60 @@ resource "aws_instance" "nitro_tee" {
     enabled = true
   }
 
-
-  root_block_device {
-    volume_size = 32  # Set root volume to 32GB
-    volume_type = "gp2"
-    encrypted   = true
-  }
-
   tags = {
     Name = var.instance_name
   }
 
-  # Use cloud-init directives and fix execution context
   user_data = base64encode(templatefile("${path.module}/user_data.sh", {
-    GITHUB_TOKEN = var.github_token  # Match exact variable name used in user_data.sh
+    GITHUB_TOKEN = var.github_token  
   }))
+}
 
-  metadata_options {
-    http_endpoint = "enabled"
-    http_tokens   = "required"
+# Network Load Balancer
+resource "aws_lb" "nlb" {
+  name               = "nlb-${var.instance_name}"
+  internal           = false
+  load_balancer_type = "network"
+  subnets            = data.aws_subnets.default.ids
+
+  enable_cross_zone_load_balancing = true
+
+  tags = {
+    Name = "nlb-${var.instance_name}"
   }
+}
+
+resource "aws_lb_target_group" "tg" {
+  name        = "tg-${var.instance_name}"
+  port        = 7047
+  protocol    = "TCP"
+  vpc_id      = data.aws_vpc.default.id
+  target_type = "instance"
+
+  health_check {
+    protocol            = "HTTPS"
+    path                = "/healthcheck"
+    matcher             = "200"
+    port                = 7047
+    interval            = 30
+    healthy_threshold   = 3
+    unhealthy_threshold = 3
+  }
+}
+
+resource "aws_lb_listener" "listener" {
+  load_balancer_arn = aws_lb.nlb.arn
+  port              = 7047
+  protocol          = "TCP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.tg.arn
+  }
+}
+
+resource "aws_lb_target_group_attachment" "tg_attachment" {
+  target_group_arn = aws_lb_target_group.tg.arn
+  target_id        = aws_instance.nitro_tee.id
+  port             = 7047
 }
